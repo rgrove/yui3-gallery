@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+    <title>gallery-history-lite example</title>
+</head>
+<body>
+
+<script src="http://yui.yahooapis.com/3.0.0/build/yui/yui-min.js"></script>
+<script src="../../../build/gallery-history-lite/gallery-history-lite-debug.js"></script>
+<script>
+YUI().use('gallery-history-lite', 'console', function (Y) {
+
+    // Create a logging console so we can watch the awesomeness happen.
+    Y.one(document.body).addClass('yui-skin-sam');
+    new Y.Console().render();
+
+    // Listen for history changes.
+    Y.on('history-lite:change', function (e) {
+        // Properties on e.changed represent new or changed history parameters.
+        Y.each(e.changed, function (value, name) {
+            Y.log(name + ' changed to "' + value + '"', 'debug', 'history-lite');
+        });
+
+        // Properties on e.removed represent history parameters that have been
+        // removed.
+        Y.each(e.removed, function (value, name) {
+            Y.log(name + ' was removed', 'debug', 'history-lite');
+        });
+
+        // The get() method returns the current value of the specified history
+        // parameter. If you call get() without specifying a parameter name,
+        // it'll return an object containing all current history parameters and
+        // their values.
+        Y.log('current value of foo is ' + Y.HistoryLite.get('foo'), 'debug', 'history-lite');
+    });
+
+    // Simulate some history change events (watch the browser's location bar and
+    // debug console to see what's happening.
+    setTimeout(function () {
+        // The add() method accepts an object containing key/value pairs of
+        // history parameter names and values. Each call to add() creates a new
+        // browser history entry.
+        Y.HistoryLite.add({foo: 'bar', baz: 'quux'});
+    }, 1000);
+
+    setTimeout(function () {
+        // The add() method will also accept a query string.
+        Y.HistoryLite.add('foo=kittens');
+    }, 2000);
+
+    setTimeout(function () {
+        // A null or undefined value causes that parameter to be removed from
+        // the history state.
+        Y.HistoryLite.add({foo: null, baz: 'monkeys'});
+    }, 3000);
+
+});
+</script>
+
+</body>
+</html>
