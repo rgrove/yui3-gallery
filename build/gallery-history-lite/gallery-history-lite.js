@@ -71,7 +71,7 @@ function createHash(params) {
         }
     });
 
-    return hash.join('&');
+    return '#' + hash.join('&');
 }
 
 /**
@@ -264,4 +264,4 @@ if (supportsHashChange) {
 }
 
 
-}, '@VERSION@' ,{requires:['event-custom']});
+}, '@VERSION@' ,{requires:['event-custom','event-custom-complex','node']});
