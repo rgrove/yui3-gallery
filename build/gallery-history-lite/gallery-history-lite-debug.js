@@ -264,4 +264,4 @@ if (supportsHashChange) {
 }
 
 
-}, '@VERSION@' ,{requires:['event-custom','event-custom-complex','node']});
+}, 'gallery-2009.12.15-22' ,{requires:['event-custom','event-custom-complex','node']});
