@@ -312,4 +312,4 @@ if (storageMode === MODE_HTML5 || storageMode === MODE_GECKO) {
 }
 
 
-}, '@VERSION@' ,{requires:['event-base','event-custom','event-custom-complex','json']});
+}, 'gallery-2010.02.22-22' ,{requires:['event-base','event-custom','event-custom-complex','json']});
