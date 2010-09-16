@@ -197,13 +197,22 @@ FormManager.integer_value_re = /^[-+]?[0-9]+$/;
 FormManager.decimal_value_re = /^[-+]?(?:[0-9]+\.?|[0-9]*\.[0-9]+)$/;
 
 /**
- * The CSS class which marks each row of the form.  Typically, each element
- * (or a very tightly coupled set of elements) is placed in a separate row.
+ * The CSS class which marks each row of the form.  Typically, each field
+ * (or a very tightly coupled set of fields) is placed in a separate row.
  * 
  * @property Y.FormManager.row_marker_class
  * @type {String}
  */
 FormManager.row_marker_class = 'formmgr-row';
+
+/**
+ * The CSS class which marks each field in a row of the form.  This enables
+ * messaging when multiple fields are in a single row.
+ * 
+ * @property Y.FormManager.field_marker_class
+ * @type {String}
+ */
+FormManager.field_marker_class = 'formmgr-field';
 
 /**
  * The CSS class which marks the container for the status message within a
@@ -260,17 +269,17 @@ var row_status_regex   = new RegExp(class_re_prefix + row_status_pattern + class
  * <p>Map of localizable strings used by pre-validation.</p>
  * 
  * <dl>
- * <dt><code>validation_error</code></dt>
+ * <dt>validation_error</dt>
  * <dd>Displayed in <code>status_node</code> by <code>notifyErrors()</code> when pre-validation fails.</dd>
- * <dt><code>required_string</code></dt>
+ * <dt>required_string</dt>
  * <dd>Displayed when <code>yiv-required</code> fails on an input field.</dd>
- * <dt><code>required_menu</code></dt>
+ * <dt>required_menu</dt>
  * <dd>Displayed when <code>yiv-required</code> fails on a select element.</dd>
- * <dt><code>length_too_short</code>, <code>length_too_long</code>, <code>length_out_of_range</code></dt>
+ * <dt>length_too_short, length_too_long, length_out_of_range</dt>
  * <dd>Displayed when <code>yiv-length</code> fails on an input field.</dd>
- * <dt><code>integer</code>, <code>integer_too_small</code>, <code>integer_too_large</code>, <code>integer_out_of_range</code></dt>
+ * <dt>integer, integer_too_small, integer_too_large, integer_out_of_range</dt>
  * <dd>Displayed when <code>yiv-integer</code> fails on an input field.</dd>
- * <dt><code>decimal</code>, <code>decimal_too_small</code>, <code>decimal_too_large</code>, <code>decimal_out_of_range</code></dt>
+ * <dt>decimal, decimal_too_small, decimal_too_large, decimal_out_of_range</dt>
  * <dd>Displayed when <code>yiv-decimal</code> fails on an input field.</dd>
  * </dl>
  * 
@@ -709,7 +718,7 @@ FormManager.prototype =
 	{
 		if (!this.form)
 		{
-			this.form = document.forms[ this.form_name ];
+			this.form = Y.config.doc.forms[ this.form_name ];
 		}
 		return this.form;
 	},
@@ -971,10 +980,6 @@ FormManager.prototype =
 		{
 			return false;
 		}
-
-		// clear all errors
-
-		this.clearMessages();
 
 		// fill in starting values
 
@@ -1244,11 +1249,21 @@ FormManager.prototype =
 		for (var i=0; i<this.form.elements.length; i++)
 		{
 			var e = this.form.elements[i];
+
+			var name = e.tagName.toLowerCase();
+			var type = (e.type ? e.type.toLowerCase() : null);
+			if (name == 'button' || type == 'submit' || type == 'reset')
+			{
+				continue;
+			}
+
 			var p = Y.one(e).ancestor('.'+FormManager.row_marker_class);
 			if (p && p.hasClass(row_status_pattern))
 			{
 				p.all('.'+FormManager.status_marker_class).set('innerHTML', '');
 				p.removeClass(row_status_pattern);
+
+				p.all('.'+FormManager.field_marker_class).removeClass(row_status_pattern);
 			}
 		}
 
@@ -1280,13 +1295,25 @@ FormManager.prototype =
 		var p = e.ancestor('.'+FormManager.row_marker_class);
 		if (p && FormManager.statusTakesPrecendence(FormManager.getElementStatus(p), type))
 		{
-			if (msg)
+			var f = p.all('.'+FormManager.field_marker_class);
+			if (f)
 			{
-				p.all('.'+FormManager.status_marker_class).set('innerHTML', msg);
+				f.removeClass(row_status_pattern);
 			}
 
-			p.removeClass(row_status_pattern);
-			p.addClass(FormManager.row_status_prefix + type);
+			if (msg)
+			{
+				p.one('.'+FormManager.status_marker_class).set('innerHTML', msg);
+			}
+
+			var new_class = FormManager.row_status_prefix + type;
+			p.replaceClass(row_status_pattern, new_class);
+
+			f = e.ancestor('.'+FormManager.field_marker_class, true);
+			if (f)
+			{
+				f.replaceClass(row_status_pattern, new_class);
+			}
 
 			var fieldset = e.ancestor('fieldset');
 			if (fieldset && FormManager.statusTakesPrecendence(FormManager.getElementStatus(fieldset), type))
@@ -1361,7 +1388,7 @@ FormManager.prototype =
 		}
 		else
 		{
-			Y.log(msg, 'error', 'FormManager');
+			Y.log(msg, 'warn', 'FormManager');
 		}
 	}
 };

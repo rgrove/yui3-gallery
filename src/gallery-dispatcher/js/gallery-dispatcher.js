@@ -54,6 +54,11 @@ ATTR_CONTENT = 'content',
 ATTR_AUTOPURGE = 'autopurge',
 ATTR_LOADING = 'loading',
 ATTR_NODE = 'node',
+ATTR_NORMALIZE = 'normalize',
+
+// Regular Expressions
+reBODY = /<\s*body.*?>(.*?)<\/\s*?body[^>\w]*?>/i,
+reHEAD = /<\s*head.*?>(.*?)<\/\s*?head[^>\w]*?>/i,
 
 //	CSS class names
 CLASS_DISPATCHER_LOADING = getClassName(DISPATCHER, 'loading'),
@@ -61,133 +66,68 @@ CLASS_DISPATCHER_LOADING = getClassName(DISPATCHER, 'loading'),
 // shorthands
 L = Y.Lang,
 isBoolean = L.isBoolean,
-isString = L.isString,
-
-/**
-	* The Dispatcher class represents an object that can manage Node Elements to
-	* inject HTML content as the content of the Node..
-	* @namespace Y
-	* @class Dispatcher
-	*/
-Dispatcher = function() {
-	Dispatcher.superclass.constructor.apply(this, arguments);
-};
+isString = L.isString;
 
 //	Utility functions
-function _parseContent(content) {
+function _parseContent(content, normalize) {
 	var fragment = Y.Node.create('<div></div>'),
-	o = {};
+		head = fragment.cloneNode(),
+		o = {}, match = null, inject = '';
+	
+	// if normalize is set, let's parse the head
+	if (normalize && (match = reHEAD.exec(content))) {
+		Y.log('normalizing scripts, links and styles from the head tag', 'info', DISPATCHER);
+		fragment.setContent(match[1]).all(SC+',style,link').each(function(n) {
+			head.append(n);
+		});
+		inject = head.get('innerHTML');
+		Y.log('trying to inject this content: '+inject, 'info', DISPATCHER);
+	}
 
-	fragment.setContent(content);
-
+	// if the content has a body tag, we should take the content of the body, if not, assume full content
+	// we should also include any injection from the head if exists
+	fragment.setContent(inject+((match=reBODY.exec(content))?match[1]:content));
+	
 	o.js = fragment.all(SC).each(function(n) {
 		n.get('parentNode').removeChild(n);
 	});
 	o.content = fragment.get('innerHTML');
+
 	return o;
 }
 
-// Dispatcher definition
-Y.mix(Dispatcher, {
+/**
+* The Dispatcher class represents an object that can manage Node Elements to
+* inject HTML content as the content of the Node..
+* @namespace Y
+* @class Dispatcher
+*/
+Y.Dispatcher = Y.Base.create(DISPATCHER, Y.Base, [], {
 
-	EVENT_PREFIX: DISPATCHER,
-	/**
-	 * Static property used to define the default attribute configuration of
-	 * the component.
-	 *
-	 * @property Y.Dispatcher.ATTRS
-	 * @Type Object
-	 * @static
-	 */
-	ATTRS: {
+	// Prototype Properties for Dispatcher
 
-		/**
-		* YUI Node Object that represent a dynamic area in the page.  
-		* @attribute node
-		* @default null
-		* @type object
-		*/
-		node: {
-			value: null,
-			setter: function(n) {
-				// stopping the current process if needed to define a new node
-				this.stop();
-				return Y.one(n);
-			}
-		},
-
-		/**
-		* If dispatcher should purge the DOM elements before replacing the content
-		* @attribute autopurge
-		* @default true
-		* @type boolean
-		*/
-		autopurge: {
-			value: true,
-			validator: isBoolean
-		},
-		/**
-		* URL that should be injected within the host
-		* @attribute uri
-		* @default null
-		* @type string
-		*/
-		uri: {
-			value: null,
-			validator: function(v) {
-				return (v && isString(v) && (v !== ''));
-			}
-		},
-		/**
-		* default content for the dynamic area
-		* @attribute content
-		* @default empty
-		* @type string
-		*/
-		content: {
-			value: '',
-			validator: isString
-		},
-		/**
-		* Boolean indicating that a process is undergoing.
-		* 
-		* @attribute loading
-		* @default false
-		* @readonly
-		* @type {boolean}
-		*/
-		loading: {
-			value: false,
-			validator: isBoolean,
-			readOnly: true,
-			setter: function(v) {
-				Y.log('setting status to ' + v, 'info', DISPATCHER);
-				if (v) {
-					this.fire(DISPATCHER_FETCH);
-					this.get(ATTR_NODE).addClass(CLASS_DISPATCHER_LOADING);
-				} else {
-					this.fire(DISPATCHER_LOAD);
-					this.get(ATTR_NODE).removeClass(CLASS_DISPATCHER_LOADING);
-				}
-				return v;
-			}
-		}
-	}
-});
-
-Y.extend(Dispatcher, Y.Base, {
-
-	//	Protected properties
+	/** 
+	* @property _queue
+	* @description Execution queue.
+	* @default null
+	* @protected
+	* @type Object
+	*/	
 	_queue: null,
+
+	/** 
+	* @property _io
+	* @description Connection Handler for AJAX requests.
+	* @default null
+	* @protected
+	* @type Object
+	*/
 	_io: null,
 
-	//	Public methods
 	initializer: function(config) {
 		config = config || {};
 		Y.log('Initializer', 'info', DISPATCHER);
 		this._queue = new Y.AsyncQueue();
-
-		this._initEvents();
 
 		this.after(ATTR_CONTENT + "Change",
 			function(e) {
@@ -216,70 +156,9 @@ Y.extend(Dispatcher, Y.Base, {
 		this._queue = null;
 		this._io = null;
 	},
-	/**
-	 * @method stop
-	 * @description Cancel the current loading and execution process immediately
-	 * @public
-	 * @return	{object} reference for chaining
-	 */
-	stop: function() {
-		this._queue.stop();
-		if (this._io) {
-			this._io.abort();
-		}
-		return this;
-	},
-	/**
-	 * Publishes Dispatcher's events
-	 *
-	 * @method _initEvents
-	 * @protected
-	 */
-	_initEvents: function() {
-
-		/**
-		 * Signals when dispatcher starts loading a new remote content (Y.io->start).
-		 *
-		 * @event fetch
-		 * @param event {Event.Facade} An Event Facade object
-		 */
-		this.publish(DISPATCHER_FETCH);
-
-		/**
-		 * Signals the moment when a node become ready, right after the 
-		 * html injecting and the execution of the scripts.
-		 *
-		 * @event ready
-		 * @param event {Event.Facade} An Event Facade object
-		 */
-		this.publish(DISPATCHER_READY);
-
-		/**
-		 * Signals the old content has been clean up (Purge), and it's 
-		 * ready to get the new content.
-		 *
-		 * @event purge
-		 * @param event {Event.Facade} An Event Facade object
-		 */
-		this.publish(DISPATCHER_PURGE);
-
-		/**
-		 * Signals rigth after injecting the new content but before executing the script tags.
-		 *
-		 * @event beforeExecute
-		 * @param event {Event.Facade} An Event Facade object
-		 */
-		this.publish(DISPATCHER_BEFOREEXECUTE);
-
-		/**
-		 * Signals when the remote content gets ready to be injected in the page (Y.io->success)
-		 *
-		 * @event load
-		 * @param event {Event.Facade} An Event Facade object
-		 */
-		this.publish(DISPATCHER_LOAD);
-
-	},
+	
+	//	Protected methods
+	
 	/**
 	 * @method _dispatch
 	 * @description Dispatch a content into the code, parsing out the scripts, 
@@ -290,7 +169,7 @@ Y.extend(Dispatcher, Y.Base, {
 	 */
 	_dispatch: function(content) {
 		var that = this,
-		o = _parseContent(content),
+		o = _parseContent(content, this.get(ATTR_NORMALIZE)),
 		q = this._queue,
 		n = this.get(ATTR_NODE);
 
@@ -351,13 +230,15 @@ Y.extend(Dispatcher, Y.Base, {
 						Y.log('inline script tag: ' + jsNode.get('innerHTML'), 'info', DISPATCHER);
 						var d = jsNode.get('ownerDocument'),
 						h = d.one('head') || d.get('documentElement'),
+						// creating a new script node to execute the inline javascrip code
 						newScript = Y.Node.create('<' + SC + '></' + SC + '>');
-						h.replaceChild(jsNode, h.appendChild(newScript));
 						if (jsNode._node.text) {
 							newScript._node.text = jsNode._node.text;
 						}
+						h.appendChild(newScript);
+						// removing script nodes as part of the clean up process
+						newScript.remove();
 						jsNode.remove();
-						//removes the script node immediately after executing it
 					}
 				});
 			}
@@ -370,6 +251,7 @@ Y.extend(Dispatcher, Y.Base, {
 		// executing the queue
 		this._queue.run();
 	},
+	
 	/**
 	* @description Fetching a remote file using Y.io. The response will be dispatched thru _dispatch method...
 	* @method _fetch
@@ -379,6 +261,7 @@ Y.extend(Dispatcher, Y.Base, {
 	* (http://developer.yahoo.com/yui/3/io/#configuration)
 	* @return object  Reference to the connection handler
 	*/
+	
 	_fetch: function(uri, cfg) {
 
 		// stopping any previous process, just in case...
@@ -412,7 +295,120 @@ Y.extend(Dispatcher, Y.Base, {
 		};
 		cfg.context = this;
 		return (this._io = Y.io(uri, cfg));
-	}
-});
+	},
 
-Y.Dispatcher = Dispatcher;
+	//	Public methods
+	
+	/**
+	 * @method stop
+	 * @description Cancel the current loading and execution process immediately
+	 * @public
+	 * @return	{object} reference for chaining
+	 */
+	stop: function() {
+		this._queue.stop();
+		if (this._io) {
+			this._io.abort();
+		}
+		return this;
+	}
+
+}, {
+
+	// Static Properties for Dispatcher
+	
+	EVENT_PREFIX: DISPATCHER,
+	/**
+	 * Static property used to define the default attribute configuration of
+	 * the component.
+	 *
+	 * @property Y.Dispatcher.ATTRS
+	 * @Type Object
+	 * @static
+	 */
+	ATTRS: {
+
+		/**
+		* YUI Node Object that represent a dynamic area in the page.  
+		* @attribute node
+		* @default null
+		* @type object
+		*/
+		node: {
+			value: null,
+			setter: function(n) {
+				// stopping the current process if needed to define a new node
+				this.stop();
+				return Y.one(n);
+			}
+		},
+		/**
+		* If dispatcher should purge the DOM elements before replacing the content
+		* @attribute autopurge
+		* @default true
+		* @type boolean
+		*/
+		autopurge: {
+			value: true,
+			validator: isBoolean
+		},
+		/**
+		* If dispatcher should analyze the content before injecting it. This will help 
+		* to support full html document injection, to collect scripts and styles from head if exists, etc.
+		* @attribute normalize
+		* @default false
+		* @type boolean
+		*/
+		normalize: {
+			value: false,
+			validator: isBoolean
+		},
+		/**
+		* URL that should be injected within the host
+		* @attribute uri
+		* @default null
+		* @type string
+		*/
+		uri: {
+			value: null,
+			validator: function(v) {
+				return (v && isString(v) && (v !== ''));
+			}
+		},
+		/**
+		* default content for the dynamic area
+		* @attribute content
+		* @default empty
+		* @type string
+		*/
+		content: {
+			value: '',
+			validator: isString
+		},
+		/**
+		* Boolean indicating that a process is undergoing.
+		* 
+		* @attribute loading
+		* @default false
+		* @readonly
+		* @type {boolean}
+		*/
+		loading: {
+			value: false,
+			validator: isBoolean,
+			readOnly: true,
+			setter: function(v) {
+				Y.log('setting status to ' + v, 'info', DISPATCHER);
+				if (v) {
+					this.fire(DISPATCHER_FETCH);
+					this.get(ATTR_NODE).addClass(CLASS_DISPATCHER_LOADING);
+				} else {
+					this.fire(DISPATCHER_LOAD);
+					this.get(ATTR_NODE).removeClass(CLASS_DISPATCHER_LOADING);
+				}
+				return v;
+			}
+		}
+	}
+	
+});
