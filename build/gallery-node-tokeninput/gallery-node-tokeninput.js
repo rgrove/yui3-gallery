@@ -1036,4 +1036,4 @@ Y.extend(TokenInput, Y.Plugin.Base, {
 Y.Plugin.TokenInput = TokenInput;
 
 
-}, '@VERSION@' ,{requires:['array-extras', 'classnamemanager', 'event-focus', 'event-valuechange', 'node-event-delegate', 'node-pluginhost', 'node-style', 'plugin'], skinnable:true});
+}, 'gallery-2010.11.12-20-45' ,{requires:['array-extras', 'classnamemanager', 'event-focus', 'event-valuechange', 'node-event-delegate', 'node-pluginhost', 'node-style', 'plugin'], skinnable:true});
