@@ -55,6 +55,22 @@ QueryBuilder.Select.prototype =
 		return [ value_cell ];
 	},
 
+	postCreate: function(
+		/* int */		filter_index,
+		/* object */	var_config,
+		/* array */		op_list,
+		/* array */		value)
+	{
+		try
+		{
+			this.value_menu.focus();
+		}
+		catch (e)
+		{
+			// IE will complain if field is invisible, instead of just ignoring it
+		}
+	},
+
 	destroy: function()
 	{
 		this.value_menu = null;
