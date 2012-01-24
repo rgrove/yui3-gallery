@@ -20,7 +20,7 @@ Y.ChoiceField = Y.Base.create('choice-field', Y.FormField, [Y.WidgetParent, Y.Wi
      */
     _validateChoices: function(val) {
         if (!Y.Lang.isArray(val)) {
-            Y.log('Choice values must be in an array');
+            Y.log('Choice values must be in an array', 'warn');
             return false;
         }
 
@@ -29,22 +29,18 @@ Y.ChoiceField = Y.Base.create('choice-field', Y.FormField, [Y.WidgetParent, Y.Wi
 
         for (; i < len; i++) {
             if (!Y.Lang.isObject(val[i])) {
-                Y.log('Choice that is not an object cannot be used');
+                Y.log('Choice that is not an object cannot be used', 'warn');
                 delete val[i];
                 continue;
             }
             if (!val[i].label ||
-            !Y.Lang.isString(val[i].label) ||
+            (!Y.Lang.isString(val[i].label) && !Y.Lang.isNumber(val[i].value)) ||
             !val[i].value ||
-            !Y.Lang.isString(val[i].value)) {
-                Y.log('Choice without label and value cannot be used');
+            (!Y.Lang.isString(val[i].value) && !Y.Lang.isNumber(val[i].value))) {
+                Y.log('Choice without label and value cannot be used', 'warn');
                 delete val[i];
                 continue;
             }
-        }
-
-        if (val.length === 0) {
-            return false;
         }
 
         return true;
@@ -63,6 +59,7 @@ Y.ChoiceField = Y.Base.create('choice-field', Y.FormField, [Y.WidgetParent, Y.Wi
         Y.Array.each(choices,
         function(c, i, a) {
             var cfg = {
+                checked : c.checked,
                 value: c.value,
                 id: (this.get('id') + '_choice' + i),
                 name: this.get('name'),
@@ -79,19 +76,23 @@ Y.ChoiceField = Y.Base.create('choice-field', Y.FormField, [Y.WidgetParent, Y.Wi
         var choices = this.get('value').split(',');
 
         if (choices && choices.length > 0) {
-            Y.Array.each(choices, function(choice) {
-                this._fieldNode.each(function(node, index, list) {
-                    if (Y.Lang.trim(node.get('value')) == Y.Lang.trim(choice)) {
-                        node.set('checked', true);
-                        return true;
-                    }
-                }, this);
-            }, this);
+            choices = Y.Array.map(choices, function(choice) {
+                return Y.Lang.trim(choice);
+            });
+
+            this._fieldNode.each(function(node, index, list) {
+                var nodeValue = Y.Lang.trim(node.get('value'));
+                if (!!~Y.Array.indexOf(choices, nodeValue)) {
+                    node.set('checked', true);
+                } else {
+                    node.set('checked', false);
+                }
+            });
         }
     },
 
     /**
-     * @method _afterChoiceChange
+     * @method _afterChoicesChange
      * @description When the available choices for the choice field change,
      *     the old ones are removed and the new ones are rendered.
      */
@@ -112,19 +113,27 @@ Y.ChoiceField = Y.Base.create('choice-field', Y.FormField, [Y.WidgetParent, Y.Wi
 
     bindUI: function() {
         this._fieldNode.on('change', Y.bind(function(e) {
-            var value = '';
+            var value = '',
+                type = this.get('multi') ? 'checkbox' : 'radio';
+
             this._fieldNode.each(function(node, index, list) {
-                if (node.get('checked') === true) {
+                if (node.get('type') == type && node.get('checked') === true) {
                     if (value.length > 0) {
                         value += ',';
                     }
                     value += node.get('value');
                 }
             }, this);
-            this.set('value', value);
+            this.set('value', value, {fromUI : true});
         },
         this));
         this.after('choicesChange', this._afterChoicesChange);
+
+        this.after('valueChange', function (e) {
+            if (!e.fromUI) {
+                this._syncFieldNode();
+            }
+        });
     }
 
 },
@@ -136,6 +145,9 @@ Y.ChoiceField = Y.Base.create('choice-field', Y.FormField, [Y.WidgetParent, Y.Wi
          * @description The choices to render into this field
          */
         choices: {
+            valueFn : function () {
+                return [];
+            },
             validator: function(val) {
                 return this._validateChoices(val);
             }
